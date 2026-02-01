@@ -19,5 +19,3 @@ async def on_message(message):
         await message.channel.send('Pong! 🟢')
 
 client.run(os.getenv("DISCORD_TOKEN"))
-
-use env var dor discord token
