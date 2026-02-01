@@ -5,100 +5,132 @@ intents = discord.Intents.default()
 intents.message_content = True
 client = discord.Client(intents=intents)
 
-# Armazenamento em memória (simples, depois dá pra evoluir)
-players = {}
-creating_character = {}
+# ===============================
+# MEMÓRIA DO MESTRE (OCULTA)
+# ===============================
+players = {}        # dados narrativos dos jogadores
+campaign = {        # estado da campanha
+    "ativa": False,
+    "mundo": "Elseworld DC",
+    "tom": "Sério, cinematográfico, com consequências",
+    "evento_atual": None
+}
 
-QUESTIONS = [
-    "Qual é o **nome do personagem**?",
-    "Esse personagem pertence a qual **universo / Elseworld**?",
-    "Qual é o **cargo, função ou papel** dele no mundo?",
-    "Quais são os **poderes ou habilidades principais**?",
-    "Quais são as **fraquezas, limites ou custos**?",
-    "Alguma **observação importante para o Mestre**? (segredos, conflitos internos, passado)"
-]
+# ===============================
+# UTILIDADES
+# ===============================
+def is_master(message):
+    return message.author.guild_permissions.administrator
 
+def get_player(user_id):
+    return players.get(user_id)
+
+# ===============================
+# EVENTOS DO BOT
+# ===============================
 @client.event
 async def on_ready():
-    print(f"Bot conectado como {client.user}")
+    print(f"Mestre conectado como {client.user}")
 
 @client.event
 async def on_message(message):
     if message.author.bot:
         return
 
-    user_id = str(message.author.id)
     content = message.content.strip()
+    user_id = message.author.id
 
-    # COMANDO: iniciar criação
-    if content.lower() == "!novo":
-        creating_character[user_id] = {
-            "step": 0,
-            "data": {}
+    # ===============================
+    # COMANDOS DO MESTRE
+    # ===============================
+    if content.startswith("!iniciar") and is_master(message):
+        campaign["ativa"] = True
+        campaign["evento_atual"] = "Introdução"
+        await message.channel.send(
+            "**A narrativa começa.**\n"
+            "Este mundo observa. Decisões terão peso.\n\n"
+            "Jogadores: usem `!personagem` para criar ou trocar seu personagem."
+        )
+        return
+
+    if content.startswith("!encerrar") and is_master(message):
+        campaign["ativa"] = False
+        await message.channel.send(
+            "**A sessão é encerrada.**\n"
+            "As consequências permanecem."
+        )
+        return
+
+    # ===============================
+    # CRIAÇÃO / TROCA DE PERSONAGEM
+    # ===============================
+    if content.startswith("!personagem"):
+        players[user_id] = {
+            "nome": None,
+            "identidade": None,
+            "cargo": None,
+            "poderes": None,
+            "fraquezas": None,
+            "estado": "ativo",
+            "segredos": []
         }
         await message.channel.send(
-            "🧠 **Criação de Personagem iniciada.**\n"
-            "Responda às perguntas com calma.\n\n"
-            f"{QUESTIONS[0]}"
+            f"{message.author.mention}\n"
+            "**Criação de personagem iniciada.**\n"
+            "Responda na ordem:\n"
+            "1️⃣ Nome do personagem\n"
+            "2️⃣ Identidade (herói, vilão, civil, agente, etc)\n"
+            "3️⃣ Cargo/função no mundo\n"
+            "4️⃣ Poderes (descrição narrativa)\n"
+            "5️⃣ Fraquezas reais\n\n"
+            "_Nada disso será público._"
         )
         return
 
-    # PROCESSO DE CRIAÇÃO
-    if user_id in creating_character:
-        step = creating_character[user_id]["step"]
-        creating_character[user_id]["data"][QUESTIONS[step]] = content
-        creating_character[user_id]["step"] += 1
-
-        if creating_character[user_id]["step"] < len(QUESTIONS):
-            await message.channel.send(QUESTIONS[creating_character[user_id]["step"]])
-        else:
-            ficha = creating_character[user_id]["data"]
-            players[user_id] = {
-                "active": ficha["Qual é o **nome do personagem**?"],
-                "ficha": ficha
-            }
-            del creating_character[user_id]
-
-            resumo = (
-                "✅ **Personagem criado com sucesso.**\n\n"
-                f"**Nome:** {ficha[QUESTIONS[0]]}\n"
-                f"**Universo:** {ficha[QUESTIONS[1]]}\n"
-                f"**Cargo:** {ficha[QUESTIONS[2]]}\n"
-                f"**Poderes:** {ficha[QUESTIONS[3]]}\n"
-                f"**Fraquezas:** {ficha[QUESTIONS[4]]}\n\n"
-                "🎭 Você já pode jogar.\n"
-                "Descreva ações normalmente."
-            )
-            await message.channel.send(resumo)
-        return
-
-    # COMANDO: ver ficha resumida
-    if content.lower() == "!ficha":
-        if user_id not in players:
-            await message.channel.send("❌ Nenhum personagem ativo. Use `!novo`.")
+    # ===============================
+    # FLUXO DE RESPOSTAS DO JOGADOR
+    # ===============================
+    player = get_player(user_id)
+    if player and campaign["ativa"]:
+        if player["nome"] is None:
+            player["nome"] = content
+            await message.channel.send("✔️ Identidade registrada. Próximo: **Identidade**.")
             return
 
-        ficha = players[user_id]["ficha"]
-        texto = (
-            "📄 **Ficha do Personagem (Resumo)**\n\n"
-            f"**Nome:** {ficha[QUESTIONS[0]]}\n"
-            f"**Universo:** {ficha[QUESTIONS[1]]}\n"
-            f"**Cargo:** {ficha[QUESTIONS[2]]}\n"
-            f"**Poderes:** {ficha[QUESTIONS[3]]}\n"
-            f"**Fraquezas:** {ficha[QUESTIONS[4]]}"
-        )
-        await message.channel.send(texto)
-        return
+        if player["identidade"] is None:
+            player["identidade"] = content
+            await message.channel.send("✔️ Função entendida. Próximo: **Cargo/Função**.")
+            return
 
-    # COMANDO: narrativa livre (RP)
-    if user_id in players:
-        personagem = players[user_id]["active"]
-        resposta = (
-            f"🎙️ **Mestre:**\n"
-            f"{personagem} executa sua ação.\n"
-            "O ambiente reage, consequências começam a se formar...\n\n"
-            "👉 Continue descrevendo o que faz."
-        )
-        await message.channel.send(resposta)
+        if player["cargo"] is None:
+            player["cargo"] = content
+            await message.channel.send("✔️ Registro aceito. Próximo: **Poderes**.")
+            return
 
+        if player["poderes"] is None:
+            player["poderes"] = content
+            await message.channel.send("✔️ Poderes analisados. Próximo: **Fraquezas**.")
+            return
+
+        if player["fraquezas"] is None:
+            player["fraquezas"] = content
+            await message.channel.send(
+                "**Personagem concluído.**\n"
+                "O mundo agora sabe que você existe.\n"
+                "_Mas não o quanto isso vai custar._"
+            )
+            return
+
+    # ===============================
+    # NARRAÇÃO LIVRE (SEM DADOS)
+    # ===============================
+    if campaign["ativa"]:
+        await message.channel.send(
+            f"**O mundo reage à ação de {message.author.display_name}.**\n"
+            "Nada acontece por acaso. Consequências estão em movimento."
+        )
+
+# ===============================
+# INICIAR BOT
+# ===============================
 client.run(os.getenv("DISCORD_TOKEN"))
