@@ -6,86 +6,144 @@ intents.message_content = True
 
 client = discord.Client(intents=intents)
 
-ESTADO = {
-    "mesa_iniciada": False,
-    "criacao_etapa": 0,
-    "personagem": {}
-}
+# ======================
+# MEMÓRIA DA MESA
+# ======================
+mesa_ativa = False
+fichas = {}
+equipes = {}
+viloes = {}
+npcs = []
+
+CANAL_MESA_NOME = "mesa-rpg"
+
 
 @client.event
 async def on_ready():
-    print(f"Mestre conectado como {client.user}")
+    print(f"🟢 Mestre conectado como {client.user}")
+
+
+def canal_valido(message):
+    return message.channel.name == CANAL_MESA_NOME
+
 
 @client.event
 async def on_message(message):
+    global mesa_ativa
+
     if message.author.bot:
         return
 
-    conteudo = message.content.lower().strip()
-
-    # TESTE BÁSICO
-    if conteudo == "!ping":
-        await message.channel.send("Pong! 🟢")
+    if not canal_valido(message):
         return
 
+    conteudo = message.content.strip()
+
+    # ======================
     # INICIAR MESA
-    if conteudo == "!iniciar" and not ESTADO["mesa_iniciada"]:
-        ESTADO["mesa_iniciada"] = True
-        ESTADO["criacao_etapa"] = 1
+    # ======================
+    if conteudo.lower() == "!iniciar":
+        mesa_ativa = False
+        fichas.clear()
+        equipes.clear()
+        viloes.clear()
+        npcs.clear()
 
         await message.channel.send(
-            "**A mesa desperta.**\n"
-            "O mundo não espera.\n\n"
-            "**Criação de personagem — Etapa 1/4**\n"
-            "Qual é o **nome** do seu personagem?"
+            "**🜂 MESA PREPARADA 🜂**\n"
+            "Este canal agora segue apenas narrativa.\n\n"
+            "**Comandos iniciais:**\n"
+            "`!ficha` – Enviar ficha do personagem\n"
+            "`!equipe` – Definir equipe / liga\n"
+            "`!viloes` – Registrar vilões permitidos\n"
+            "`!começar` – Iniciar a história\n\n"
+            "_O mundo age mesmo quando vocês não._"
         )
         return
 
-    # CRIAÇÃO DE PERSONAGEM
-    if ESTADO["mesa_iniciada"]:
-        if ESTADO["criacao_etapa"] == 1:
-            ESTADO["personagem"]["nome"] = message.content
-            ESTADO["criacao_etapa"] = 2
+    # ======================
+    # FICHA DO PERSONAGEM
+    # ======================
+    if conteudo.lower().startswith("!ficha"):
+        await message.channel.send(
+            "**📄 FICHA DO PERSONAGEM**\n"
+            "Envie no formato:\n\n"
+            "**Nome:**\n"
+            "**Identidade:**\n"
+            "**Poderes:**\n"
+            "**Fraquezas:**\n"
+            "**Cargo / Função:**\n"
+            "**Resumo narrativo:**"
+        )
+        return
 
-            await message.channel.send(
-                f"Nome registrado: **{message.content}**\n\n"
-                "**Etapa 2/4**\n"
-                "Qual é o **codinome** ou identidade heroica?"
-            )
+    if mesa_ativa is False and "Nome:" in conteudo and "Poderes:" in conteudo:
+        fichas[message.author.id] = conteudo
+        await message.channel.send("✅ Ficha registrada.")
+        return
+
+    # ======================
+    # EQUIPE
+    # ======================
+    if conteudo.lower().startswith("!equipe"):
+        await message.channel.send(
+            "**🛡️ EQUIPE / LIGA**\n"
+            "Envie:\n"
+            "- Nome da equipe\n"
+            "- Base\n"
+            "- Membros conhecidos"
+        )
+        return
+
+    if mesa_ativa is False and "Base:" in conteudo and "Membros:" in conteudo:
+        equipes["principal"] = conteudo
+        await message.channel.send("✅ Equipe registrada.")
+        return
+
+    # ======================
+    # VILÕES
+    # ======================
+    if conteudo.lower().startswith("!viloes"):
+        await message.channel.send(
+            "**🩸 VILÕES PERMITIDOS**\n"
+            "Envie a lista.\n"
+            "O Mestre NÃO criará vilões fora dela."
+        )
+        return
+
+    if mesa_ativa is False and conteudo.startswith("-"):
+        viloes[len(viloes) + 1] = conteudo
+        await message.channel.send("☠️ Vilão registrado.")
+        return
+
+    # ======================
+    # COMEÇAR HISTÓRIA
+    # ======================
+    if conteudo.lower() == "!começar":
+        if not fichas:
+            await message.channel.send("⚠️ Nenhuma ficha registrada.")
             return
 
-        if ESTADO["criacao_etapa"] == 2:
-            ESTADO["personagem"]["codinome"] = message.content
-            ESTADO["criacao_etapa"] = 3
+        mesa_ativa = True
 
-            await message.channel.send(
-                f"Codinome registrado: **{message.content}**\n\n"
-                "**Etapa 3/4**\n"
-                "Descreva **poderes e habilidades principais**."
-            )
-            return
+        await message.channel.send(
+            "**🎬 A HISTÓRIA COMEÇA**\n\n"
+            "O mundo já estava em movimento antes de vocês chegarem.\n"
+            "A primeira decisão não será anunciada.\n"
+            "Ela já está acontecendo.\n\n"
+            "_Mestre aguarda ações._"
+        )
+        return
 
-        if ESTADO["criacao_etapa"] == 3:
-            ESTADO["personagem"]["poderes"] = message.content
-            ESTADO["criacao_etapa"] = 4
+    # ======================
+    # NARRAÇÃO LIVRE
+    # ======================
+    if mesa_ativa:
+        await message.channel.send(
+            f"📖 **O mundo reage à ação de {message.author.display_name}.**\n"
+            "Nada é ignorado. Nada é gratuito.\n"
+            "_Consequências estão em curso…_"
+        )
 
-            await message.channel.send(
-                "**Etapa 4/4**\n"
-                "Quais são as **fraquezas, limites ou conflitos** do personagem?"
-            )
-            return
-
-        if ESTADO["criacao_etapa"] == 4:
-            ESTADO["personagem"]["fraquezas"] = message.content
-            ESTADO["criacao_etapa"] = 999
-
-            await message.channel.send(
-                "**Personagem criado.**\n\n"
-                f"🦸 **{ESTADO['personagem']['codinome']}**\n"
-                f"Nome: {ESTADO['personagem']['nome']}\n\n"
-                "**A narrativa começa agora.**\n"
-                "Descreva sua primeira ação."
-            )
-            return
 
 client.run(os.getenv("DISCORD_TOKEN"))
