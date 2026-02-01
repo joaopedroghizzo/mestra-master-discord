@@ -3,128 +3,89 @@ import os
 
 intents = discord.Intents.default()
 intents.message_content = True
+
 client = discord.Client(intents=intents)
 
-# ======================
-# MEMÓRIA DO MESTRE
-# ======================
-SESSOES = {}        # estado por canal
-PERSONAGENS = {}   # fichas por usuário
-NPCS = {}           # npc e vilões (oculto)
-MUNDO = {
-    "tom": "sério, cinematográfico, às vezes acolhedor quando necessário",
-    "regra": "decisões têm consequências; o mundo anda sozinho",
-    "universo": "Elseworld DC semi-canônico"
+ESTADO = {
+    "mesa_iniciada": False,
+    "criacao_etapa": 0,
+    "personagem": {}
 }
 
-# ======================
-# UTIL
-# ======================
-def canal_id(message):
-    return str(message.channel.id)
-
-def autor_id(message):
-    return str(message.author.id)
-
-# ======================
-# EVENTOS
-# ======================
 @client.event
 async def on_ready():
-    print(f"Bot conectado como {client.user}")
+    print(f"Mestre conectado como {client.user}")
 
 @client.event
 async def on_message(message):
     if message.author.bot:
         return
 
-    texto = message.content.strip()
-    cid = canal_id(message)
-    uid = autor_id(message)
+    conteudo = message.content.lower().strip()
 
-    # -------- PING --------
-    if texto == "!ping":
+    # TESTE BÁSICO
+    if conteudo == "!ping":
         await message.channel.send("Pong! 🟢")
         return
 
-    # -------- INICIAR --------
-    if texto == "!iniciar":
-        SESSOES[cid] = {"fase": "criacao_nome"}
+    # INICIAR MESA
+    if conteudo == "!iniciar" and not ESTADO["mesa_iniciada"]:
+        ESTADO["mesa_iniciada"] = True
+        ESTADO["criacao_etapa"] = 1
+
         await message.channel.send(
             "**A mesa desperta.**\n"
-            "_O mundo não espera._\n\n"
+            "O mundo não espera.\n\n"
             "**Criação de personagem — Etapa 1/4**\n"
             "Qual é o **nome** do seu personagem?"
         )
         return
 
-    # -------- FLUXO DE CRIAÇÃO --------
-    if cid in SESSOES:
-        fase = SESSOES[cid].get("fase")
+    # CRIAÇÃO DE PERSONAGEM
+    if ESTADO["mesa_iniciada"]:
+        if ESTADO["criacao_etapa"] == 1:
+            ESTADO["personagem"]["nome"] = message.content
+            ESTADO["criacao_etapa"] = 2
 
-        # Nome
-        if fase == "criacao_nome":
-            PERSONAGENS[uid] = {"nome": texto}
-            SESSOES[cid]["fase"] = "criacao_papel"
             await message.channel.send(
+                f"Nome registrado: **{message.content}**\n\n"
                 "**Etapa 2/4**\n"
-                "Qual é o **papel** do personagem no mundo?\n"
-                "_(ex: herói, anti-herói, vigilante, agente, civil especial)_"
+                "Qual é o **codinome** ou identidade heroica?"
             )
             return
 
-        # Papel
-        if fase == "criacao_papel":
-            PERSONAGENS[uid]["papel"] = texto
-            SESSOES[cid]["fase"] = "criacao_poderes"
+        if ESTADO["criacao_etapa"] == 2:
+            ESTADO["personagem"]["codinome"] = message.content
+            ESTADO["criacao_etapa"] = 3
+
             await message.channel.send(
+                f"Codinome registrado: **{message.content}**\n\n"
                 "**Etapa 3/4**\n"
-                "Liste **poderes, habilidades ou recursos**.\n"
-                "_Sem números. Lógica narrativa._"
+                "Descreva **poderes e habilidades principais**."
             )
             return
 
-        # Poderes
-        if fase == "criacao_poderes":
-            PERSONAGENS[uid]["poderes"] = texto
-            SESSOES[cid]["fase"] = "criacao_fraquezas"
+        if ESTADO["criacao_etapa"] == 3:
+            ESTADO["personagem"]["poderes"] = message.content
+            ESTADO["criacao_etapa"] = 4
+
             await message.channel.send(
                 "**Etapa 4/4**\n"
-                "Liste **fraquezas, limites ou custos**.\n"
-                "_Toda força cobra um preço._"
+                "Quais são as **fraquezas, limites ou conflitos** do personagem?"
             )
             return
 
-        # Fraquezas (finaliza)
-        if fase == "criacao_fraquezas":
-            PERSONAGENS[uid]["fraquezas"] = texto
-            SESSOES[cid]["fase"] = "jogo"
+        if ESTADO["criacao_etapa"] == 4:
+            ESTADO["personagem"]["fraquezas"] = message.content
+            ESTADO["criacao_etapa"] = 999
 
-            p = PERSONAGENS[uid]
             await message.channel.send(
-                "**Ficha registrada.**\n\n"
-                f"**Nome:** {p['nome']}\n"
-                f"**Papel:** {p['papel']}\n"
-                f"**Poderes:** {p['poderes']}\n"
-                f"**Fraquezas:** {p['fraquezas']}\n\n"
-                "_O mundo se move._\n"
-                "**Cena 1 — Introdução**\n"
-                "Descreva sua **primeira ação**."
+                "**Personagem criado.**\n\n"
+                f"🦸 **{ESTADO['personagem']['codinome']}**\n"
+                f"Nome: {ESTADO['personagem']['nome']}\n\n"
+                "**A narrativa começa agora.**\n"
+                "Descreva sua primeira ação."
             )
             return
 
-    # -------- JOGO EM ANDAMENTO --------
-    if cid in SESSOES and SESSOES[cid].get("fase") == "jogo":
-        # Narrativa reativa simples (base)
-        await message.channel.send(
-            f"🜂 **Consequência**\n"
-            f"Sua ação ecoa no mundo.\n"
-            f"_Algo reage fora do seu campo de visão._\n\n"
-            "**O que você faz agora?**"
-        )
-        return
-
-# ======================
-# RUN
-# ======================
 client.run(os.getenv("DISCORD_TOKEN"))
